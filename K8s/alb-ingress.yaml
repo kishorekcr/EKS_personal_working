@@ -26,7 +26,7 @@ metadata:
     alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
 
     # ✅ Public subnet IDs from your cluster networking tab (image you shared)
-    alb.ingress.kubernetes.io/subnets: subnet-0a2ce88bd57b20994,subnet-0be7a5bc34083cb88,subnet-0c6b1a49df39bc5d3
+    alb.ingress.kubernetes.io/subnets: subnet-0eabbba01f251efb0,subnet-0bcfb5643fab2eaa9,subnet-078fb598fe647ae21
 
     alb.ingress.kubernetes.io/tags: env=dev,app=petclinic
 
