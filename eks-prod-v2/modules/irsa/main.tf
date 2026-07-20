@@ -78,6 +78,7 @@ resource "aws_iam_policy" "alb_controller" {
           "elasticloadbalancing:DescribeLoadBalancerAttributes",
           "elasticloadbalancing:DescribeListeners",
           "elasticloadbalancing:DescribeListenerCertificates",
+          "elasticloadbalancing:DescribeListenerAttributes",
           "elasticloadbalancing:DescribeSSLPolicies",
           "elasticloadbalancing:DescribeRules",
           "elasticloadbalancing:DescribeTargetGroups",
