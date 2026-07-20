@@ -1,0 +1,81 @@
+# -------------------------------------------------------
+# ServiceAccount — Identity for petclinic pods
+# -------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: petclinic-sa
+  namespace: petclinic
+  labels:
+    app: petclinic
+  # IRSA annotation — if your app needs AWS access (S3, Secrets Manager etc.)
+  # annotations:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789:role/petclinic-role
+
+---
+# -------------------------------------------------------
+# Role — What actions are allowed within petclinic namespace
+# -------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: petclinic-role
+  namespace: petclinic
+rules:
+  # Allow app to read its own ConfigMap and Secret
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list"]
+
+  # Allow reading pod info (useful for health/debug)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+
+---
+# -------------------------------------------------------
+# RoleBinding — Bind Role to ServiceAccount
+# -------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: petclinic-rolebinding
+  namespace: petclinic
+subjects:
+  - kind: ServiceAccount
+    name: petclinic-sa        # The SA we created above
+    namespace: petclinic
+roleRef:
+  kind: Role
+  name: petclinic-role        # The Role we created above
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# -------------------------------------------------------
+# ClusterRole — Read-only access to nodes (for monitoring)
+# -------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: petclinic-node-reader
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+
+---
+# -------------------------------------------------------
+# ClusterRoleBinding — Bind ClusterRole to ServiceAccount
+# -------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: petclinic-node-reader-binding
+subjects:
+  - kind: ServiceAccount
+    name: petclinic-sa
+    namespace: petclinic
+roleRef:
+  kind: ClusterRole
+  name: petclinic-node-reader
+  apiGroup: rbac.authorization.k8s.io

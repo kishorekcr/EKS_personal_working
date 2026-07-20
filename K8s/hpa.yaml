@@ -1,0 +1,49 @@
+# -------------------------------------------------------
+# HorizontalPodAutoscaler
+# Pre-req: metrics-server must be installed in EKS
+# Install: kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+# -------------------------------------------------------
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: petclinic-hpa
+  namespace: petclinic
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: petclinic         # Must match deployment name
+
+  minReplicas: 2            # Never go below 2 (HA)
+  maxReplicas: 6            # Never exceed 6
+
+  metrics:
+    # Scale based on CPU
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60    # Scale up when CPU > 60%
+
+    # Scale based on Memory
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70    # Scale up when Memory > 70%
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60    # Wait 60s before scaling up again
+      policies:
+        - type: Pods
+          value: 2                      # Add max 2 pods at a time
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 120   # Wait 2 mins before scaling down
+      policies:
+        - type: Pods
+          value: 1                      # Remove 1 pod at a time (safe)
+          periodSeconds: 60

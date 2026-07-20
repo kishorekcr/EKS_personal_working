@@ -1,0 +1,20 @@
+# -------------------------------------------------------
+# PetClinic Service — NodePort (ALB Ingress will route to this)
+# -------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: petclinic-service
+  namespace: petclinic
+  annotations:
+    # Tells ALB controller this service is used with ALB Ingress
+    alb.ingress.kubernetes.io/target-type: ip
+spec:
+  selector:
+    app: petclinic
+  ports:
+    - name: http
+      port: 80           # Service port
+      targetPort: 8080   # Container port
+      protocol: TCP
+  type: NodePort         # Required for ALB Ingress Controller
