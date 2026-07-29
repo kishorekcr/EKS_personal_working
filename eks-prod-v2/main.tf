@@ -10,6 +10,14 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.0"
     }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.30"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.13"
+    }
   }
 
   # ── REMOTE STATE ─────────────────────────────────────────────────────

@@ -7,18 +7,7 @@
 # source), so no kubeconfig file is needed for terraform apply to work.
 # ═══════════════════════════════════════════════════════════════════════
 
-terraform {
-  required_providers {
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 2.30"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.13"
-    }
-  }
-}
+
 
 # Short-lived auth token for the cluster this config just created
 data "aws_eks_cluster_auth" "this" {
