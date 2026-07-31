@@ -84,3 +84,72 @@ resource "helm_release" "alb_controller" {
     kubernetes_service_account.alb_controller
   ]
 }
+
+# ── CLUSTER AUTOSCALER ───────────────────────────────────────────────────
+# IAM role already created by module.irsa (cluster_autoscaler_role_arn).
+# EKS managed node groups auto-tag their underlying ASG with
+# k8s.io/cluster-autoscaler/enabled + k8s.io/cluster-autoscaler/<cluster-name>
+# so no manual ASG tagging step is needed — auto-discovery just works.
+resource "kubernetes_service_account" "cluster_autoscaler" {
+  metadata {
+    name      = "cluster-autoscaler"
+    namespace = "kube-system"
+
+    labels = {
+      "app.kubernetes.io/name" = "cluster-autoscaler"
+    }
+
+    annotations = {
+      "eks.amazonaws.com/role-arn" = module.irsa.cluster_autoscaler_role_arn
+    }
+  }
+
+  depends_on = [module.eks]
+}
+
+resource "helm_release" "cluster_autoscaler" {
+  name       = "cluster-autoscaler"
+  repository = "https://kubernetes.github.io/autoscaler"
+  chart      = "cluster-autoscaler"
+  namespace  = "kube-system"
+
+  set {
+    name  = "autoDiscovery.clusterName"
+    value = module.eks.cluster_name
+  }
+
+  set {
+    name  = "awsRegion"
+    value = var.aws_region
+  }
+
+  set {
+    name  = "rbac.serviceAccount.create"
+    value = "false" # we already created it above
+  }
+
+  set {
+    name  = "rbac.serviceAccount.name"
+    value = kubernetes_service_account.cluster_autoscaler.metadata[0].name
+  }
+
+  # Match your cluster's k8s minor version so CA uses the compatible image
+  set {
+    name  = "image.tag"
+    value = "v1.36.0" # keep in sync with cluster_version in tfvars
+  }
+
+  set {
+    name  = "extraArgs.balance-similar-node-groups"
+    value = "true"
+  }
+
+  set {
+    name  = "extraArgs.skip-nodes-with-system-pods"
+    value = "false"
+  }
+
+  depends_on = [
+    kubernetes_service_account.cluster_autoscaler
+  ]
+}
