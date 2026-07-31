@@ -171,7 +171,7 @@ resource "aws_eks_node_group" "main" {
   subnet_ids      = var.private_subnet_ids  # Always private — never public
 
   instance_types = var.node_instance_types
-  capacity_type  = "ON_DEMAND"  # Use SPOT in dev/staging to save cost
+  capacity_type  = "SPOT"  # Use SPOT in dev/staging to save cost
   ami_type       = "AL2023_x86_64_STANDARD"
   disk_size      = 50
 
