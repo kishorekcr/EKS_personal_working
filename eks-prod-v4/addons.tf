@@ -155,30 +155,31 @@ resource "helm_release" "cluster_autoscaler" {
 }
 
 # ── JENKINS / KANIKO ──────────────────────────────────────────────────────
-# The "jenkins" ServiceAccount in "jenkins-agents" is created by your
-# Jenkins Helm chart / JCasC, not by this repo — so unlike alb_controller
-# and cluster_autoscaler above, we don't use kubernetes_service_account
-# (that would try to CREATE it and fail with "already exists"). Instead
-# kubernetes_annotations adopts just the annotation on the existing object,
-# replacing the manual `kubectl annotate serviceaccount jenkins ...` step.
-resource "kubernetes_annotations" "jenkins_kaniko" {
-  api_version = "v1"
-  kind        = "ServiceAccount"
+# Terraform creates the namespace + ServiceAccount itself (instead of
+# waiting for Jenkins's Helm chart to make it) — same pattern as
+# alb_controller/cluster_autoscaler above. When you later install Jenkins
+# via Helm, set serviceAccount.create=false and
+# serviceAccount.name=jenkins so it reuses this SA instead of making
+# its own (which would strip the annotation).
+resource "kubernetes_namespace" "jenkins_agents" {
+  metadata {
+    name = "jenkins-agents"
+  }
 
+  depends_on = [module.eks]
+}
+
+resource "kubernetes_service_account" "jenkins_kaniko" {
   metadata {
     name      = "jenkins"
-    namespace = "jenkins-agents"
+    namespace = kubernetes_namespace.jenkins_agents.metadata[0].name
+
+    annotations = {
+      "eks.amazonaws.com/role-arn" = module.irsa.jenkins_kaniko_role_arn
+    }
   }
 
-  annotations = {
-    "eks.amazonaws.com/role-arn" = module.irsa.jenkins_kaniko_role_arn
-  }
-
-  force = true
-
-  # The SA must already exist in the cluster (Helm/JCasC creates it) before
-  # Terraform can annotate it, and the IAM role must exist first too.
-  depends_on = [module.eks, module.irsa]
+  depends_on = [module.eks, module.irsa, kubernetes_namespace.jenkins_agents]
 }
 
 # ── ARGO CD ───────────────────────────────────────────────────────────────
