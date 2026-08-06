@@ -293,6 +293,7 @@ resource "aws_iam_policy" "jenkins_kaniko" {
           "ecr:InitiateLayerUpload",
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload",
+          "ecr:DescribeImages",
           "ecr:CreateRepository" # drop this line if repos are pre-created and you don't want kaniko creating new ones
         ]
         Resource = "arn:aws:ecr:${var.aws_region}:${data.aws_caller_identity.current.account_id}:repository/*"
