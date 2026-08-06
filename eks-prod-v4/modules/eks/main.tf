@@ -127,6 +127,18 @@ resource "aws_security_group_rule" "nodes_to_cluster_443" {
   description              = "Nodes to control plane HTTPS"
 }
 
+resource "aws_security_group_rule" "nodeport_from_internet" {
+  type              = "ingress"
+  from_port         = 30000
+  to_port           = 32767
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
+  description       = "NodePort range - required for Service type=LoadBalancer (classic ELB/NLB) to reach pods"
+
+  depends_on = [aws_eks_cluster.this]
+}
+
 # ── EKS CLUSTER ───────────────────────────────────────────────────────────
 resource "aws_eks_cluster" "this" {
   name     = var.cluster_name
