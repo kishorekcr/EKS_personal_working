@@ -75,6 +75,12 @@ No app in this repo has a public URL. Reach each one with a
 **ArgoCD**
 ```bash
 kubectl port-forward -n argocd svc/argocd-server 8080:443
+
+kubectl port-forward \
+--address 0.0.0.0 \
+-n argocd \
+svc/argocd-server \
+8888:443
 ```
 Open `https://localhost:8080` (self-signed cert — click through the browser
 warning). Admin password:
@@ -85,6 +91,12 @@ kubectl get secret -n argocd argocd-initial-admin-secret -o jsonpath="{.data.pas
 **Grafana**
 ```bash
 kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80
+
+kubectl port-forward \
+--address 0.0.0.0 \
+-n monitoring \
+svc/kube-prometheus-stack-grafana \
+3000:80
 ```
 Open `http://localhost:3000`. Username `admin`, password:
 ```bash
@@ -94,6 +106,12 @@ kubectl get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath="{.da
 **Prometheus**
 ```bash
 kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
+
+kubectl port-forward \
+--address 0.0.0.0 \
+-n monitoring \
+svc/kube-prometheus-stack-prometheus \
+9090:9090
 ```
 Open `http://localhost:9090`. No login — Prometheus has no built-in
 authentication, which is exactly why it isn't exposed publicly here.
