@@ -41,7 +41,7 @@ variable "node_max_size" {
 variable "monitoring_node_instance_types" {
   description = "EC2 instance types for the dedicated monitoring node group"
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.small"]
 }
 
 variable "monitoring_node_size" {
