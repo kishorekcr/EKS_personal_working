@@ -44,9 +44,9 @@ output "jenkins_kaniko_role_arn" {
   value       = module.irsa.jenkins_kaniko_role_arn
 }
 
-output "argocd_server_url" {
-  description = "ALB hostname for the argocd-server Ingress (may take a few minutes to populate after apply)"
-  value       = try("http://${data.kubernetes_ingress_v1.argocd_server.status[0].load_balancer[0].ingress[0].hostname}", "not ready yet - re-run terraform apply or check kubectl get ingress -n argocd")
+output "argocd_access_note" {
+  description = "How to reach ArgoCD — no public URL, port-forward only"
+  value       = "kubectl port-forward -n argocd svc/argocd-server 8080:443"
 }
 
 output "kubeconfig_command" {

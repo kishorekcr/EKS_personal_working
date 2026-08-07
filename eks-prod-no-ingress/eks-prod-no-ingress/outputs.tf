@@ -44,9 +44,19 @@ output "jenkins_kaniko_role_arn" {
   value       = module.irsa.jenkins_kaniko_role_arn
 }
 
-output "argocd_server_url" {
-  description = "ALB hostname for the argocd-server Ingress (may take a few minutes to populate after apply)"
-  value       = try("http://${data.kubernetes_ingress_v1.argocd_server.status[0].load_balancer[0].ingress[0].hostname}", "not ready yet - re-run terraform apply or check kubectl get ingress -n argocd")
+output "argocd_url" {
+  description = "NLB hostname for ArgoCD (may take a few minutes after apply)"
+  value       = try("https://${data.kubernetes_service.argocd_server.status[0].load_balancer[0].ingress[0].hostname}", "not ready yet - check kubectl get svc -n argocd")
+}
+
+output "grafana_url" {
+  description = "NLB hostname for Grafana (may take a few minutes after apply)"
+  value       = try("http://${data.kubernetes_service.grafana.status[0].load_balancer[0].ingress[0].hostname}", "not ready yet - check kubectl get svc -n monitoring")
+}
+
+output "prometheus_url" {
+  description = "NLB hostname for Prometheus - NO AUTH, see security warning in addons.tf (may take a few minutes after apply)"
+  value       = try("http://${data.kubernetes_service.prometheus.status[0].load_balancer[0].ingress[0].hostname}:9090", "not ready yet - check kubectl get svc -n monitoring")
 }
 
 output "kubeconfig_command" {

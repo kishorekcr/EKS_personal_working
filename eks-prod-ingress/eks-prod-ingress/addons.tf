@@ -205,17 +205,14 @@ resource "helm_release" "argocd" {
   # https://github.com/argoproj/argo-helm/releases
   version = "7.7.11"
 
-  # No LoadBalancer service — that's what was giving you an NLB. Keep the
-  # Service internal-only and let the ALB Ingress below be the only
-  # internet-facing entry point.
+  # ALB doesn't pass TLS straight through to the backend like an NLB does,
+  # so we terminate TLS at the ALB and let argocd-server run plain HTTP
+  # behind it — standard pattern for argocd + ALB Ingress.
   set {
     name  = "server.service.type"
     value = "ClusterIP"
   }
 
-  # ALB doesn't proxy TLS through to the backend the way an NLB passthrough
-  # does, so we terminate TLS at the ALB and let argocd-server itself run
-  # plain HTTP behind it (standard pattern for argocd + ALB).
   set {
     name  = "server.insecure"
     value = "true"
@@ -246,10 +243,10 @@ resource "helm_release" "argocd" {
     value = "[{\"HTTP\":80}]"
   }
 
-  depends_on = [kubernetes_namespace.argocd]
+  depends_on = [kubernetes_namespace.argocd, helm_release.alb_controller]
 }
 
-# So you don't have to run `kubectl get ingress -n argocd` just to find the URL
+# So you don't have to run `kubectl get ingress -n argocd` for the URL
 data "kubernetes_ingress_v1" "argocd_server" {
   metadata {
     name      = "argocd-server"
@@ -257,4 +254,124 @@ data "kubernetes_ingress_v1" "argocd_server" {
   }
 
   depends_on = [helm_release.argocd]
+}
+
+# ── PROMETHEUS + GRAFANA ──────────────────────────────────────────────────
+# kube-prometheus-stack bundles Prometheus, Grafana, Alertmanager, and
+# kube-state-metrics in one chart. Everything except node-exporter is
+# pinned to the tainted monitoring node group (node-exporter is a
+# DaemonStat that must run on every node to collect its metrics, so it
+# gets a blanket toleration instead of nodeSelector — it needs to be
+# EVERYWHERE, not just the monitoring node).
+resource "kubernetes_namespace" "monitoring" {
+  metadata {
+    name = "monitoring"
+  }
+
+  depends_on = [module.eks]
+}
+
+resource "helm_release" "kube_prometheus_stack" {
+  name       = "kube-prometheus-stack"
+  repository = "https://prometheus-community.github.io/helm-charts"
+  chart      = "kube-prometheus-stack"
+  namespace  = kubernetes_namespace.monitoring.metadata[0].name
+
+  # Pin deliberately — check latest at
+  # https://github.com/prometheus-community/helm-charts/releases
+  version = "65.5.1"
+
+  values = [<<-EOT
+    grafana:
+      nodeSelector:
+        role: monitoring
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: monitoring
+          effect: NoSchedule
+      ingress:
+        enabled: true
+        ingressClassName: alb
+        annotations:
+          alb.ingress.kubernetes.io/scheme: internet-facing
+          alb.ingress.kubernetes.io/target-type: ip
+          alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+        hosts: []
+        path: /
+
+    alertmanager:
+      alertmanagerSpec:
+        nodeSelector:
+          role: monitoring
+        tolerations:
+          - key: dedicated
+            operator: Equal
+            value: monitoring
+            effect: NoSchedule
+
+    prometheusOperator:
+      nodeSelector:
+        role: monitoring
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: monitoring
+          effect: NoSchedule
+
+    # SECURITY WARNING: Prometheus has NO built-in authentication. Anyone
+    # who reaches this URL sees every metric, target, and label — that can
+    # include internal service names, error rates, sometimes more. If this
+    # is a real prod cluster, at minimum lock the ALB down with
+    # alb.ingress.kubernetes.io/inbound-cidrs to your office/VPN CIDR
+    # (uncomment and fill in below), or better, put an auth proxy in front.
+    prometheus:
+      prometheusSpec:
+        nodeSelector:
+          role: monitoring
+        tolerations:
+          - key: dedicated
+            operator: Equal
+            value: monitoring
+            effect: NoSchedule
+        retention: 15d
+      ingress:
+        enabled: true
+        ingressClassName: alb
+        annotations:
+          alb.ingress.kubernetes.io/scheme: internet-facing
+          alb.ingress.kubernetes.io/target-type: ip
+          alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+          # alb.ingress.kubernetes.io/inbound-cidrs: "203.0.113.0/24"
+        paths:
+          - /
+
+    # DaemonSet — deliberately NOT nodeSelector-pinned, it must run on
+    # every node (including the monitoring one) to scrape host metrics.
+    prometheus-node-exporter:
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: monitoring
+          effect: NoSchedule
+  EOT
+  ]
+
+  depends_on = [module.eks, kubernetes_namespace.monitoring, helm_release.alb_controller]
+}
+
+data "kubernetes_ingress_v1" "grafana" {
+  metadata {
+    name      = "kube-prometheus-stack-grafana"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+  }
+  depends_on = [helm_release.kube_prometheus_stack]
+}
+
+data "kubernetes_ingress_v1" "prometheus" {
+  metadata {
+    name      = "kube-prometheus-stack-prometheus"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+  }
+  depends_on = [helm_release.kube_prometheus_stack]
 }

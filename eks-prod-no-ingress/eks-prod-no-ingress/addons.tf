@@ -205,56 +205,138 @@ resource "helm_release" "argocd" {
   # https://github.com/argoproj/argo-helm/releases
   version = "7.7.11"
 
-  # No LoadBalancer service — that's what was giving you an NLB. Keep the
-  # Service internal-only and let the ALB Ingress below be the only
-  # internet-facing entry point.
+  # Plain Service type=LoadBalancer, no Ingress — AWS Load Balancer
+  # Controller provisions an NLB for this. NLB does raw TCP passthrough,
+  # so argocd-server keeps its own TLS (no server.insecure needed here,
+  # unlike the ALB variant).
   set {
     name  = "server.service.type"
-    value = "ClusterIP"
+    value = "LoadBalancer"
   }
 
-  # ALB doesn't proxy TLS through to the backend the way an NLB passthrough
-  # does, so we terminate TLS at the ALB and let argocd-server itself run
-  # plain HTTP behind it (standard pattern for argocd + ALB).
+  # Default scheme for controller-managed NLBs is "internal" — this makes
+  # it internet-facing (this is what silently broke it the first time).
   set {
-    name  = "server.insecure"
-    value = "true"
-  }
-
-  set {
-    name  = "server.ingress.enabled"
-    value = "true"
-  }
-
-  set {
-    name  = "server.ingress.ingressClassName"
-    value = "alb"
-  }
-
-  set {
-    name  = "server.ingress.annotations.alb\\.ingress\\.kubernetes\\.io/scheme"
+    name  = "server.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-scheme"
     value = "internet-facing"
   }
 
-  set {
-    name  = "server.ingress.annotations.alb\\.ingress\\.kubernetes\\.io/target-type"
-    value = "ip"
-  }
-
-  set {
-    name  = "server.ingress.annotations.alb\\.ingress\\.kubernetes\\.io/listen-ports"
-    value = "[{\"HTTP\":80}]"
-  }
-
-  depends_on = [kubernetes_namespace.argocd]
+  depends_on = [kubernetes_namespace.argocd, helm_release.alb_controller]
 }
 
-# So you don't have to run `kubectl get ingress -n argocd` just to find the URL
-data "kubernetes_ingress_v1" "argocd_server" {
+# So you don't have to run `kubectl get svc -n argocd` for the URL
+data "kubernetes_service" "argocd_server" {
   metadata {
     name      = "argocd-server"
     namespace = kubernetes_namespace.argocd.metadata[0].name
   }
-
   depends_on = [helm_release.argocd]
+}
+
+# ── PROMETHEUS + GRAFANA ──────────────────────────────────────────────────
+# kube-prometheus-stack bundles Prometheus, Grafana, Alertmanager, and
+# kube-state-metrics in one chart. Everything except node-exporter is
+# pinned to the tainted monitoring node group (node-exporter is a
+# DaemonStat that must run on every node to collect its metrics, so it
+# gets a blanket toleration instead of nodeSelector — it needs to be
+# EVERYWHERE, not just the monitoring node).
+resource "kubernetes_namespace" "monitoring" {
+  metadata {
+    name = "monitoring"
+  }
+
+  depends_on = [module.eks]
+}
+
+resource "helm_release" "kube_prometheus_stack" {
+  name       = "kube-prometheus-stack"
+  repository = "https://prometheus-community.github.io/helm-charts"
+  chart      = "kube-prometheus-stack"
+  namespace  = kubernetes_namespace.monitoring.metadata[0].name
+
+  # Pin deliberately — check latest at
+  # https://github.com/prometheus-community/helm-charts/releases
+  version = "65.5.1"
+
+  values = [<<-EOT
+    grafana:
+      nodeSelector:
+        role: monitoring
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: monitoring
+          effect: NoSchedule
+      service:
+        type: LoadBalancer
+        annotations:
+          service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+
+    alertmanager:
+      alertmanagerSpec:
+        nodeSelector:
+          role: monitoring
+        tolerations:
+          - key: dedicated
+            operator: Equal
+            value: monitoring
+            effect: NoSchedule
+
+    prometheusOperator:
+      nodeSelector:
+        role: monitoring
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: monitoring
+          effect: NoSchedule
+
+    # SECURITY WARNING: Prometheus has NO built-in authentication. An
+    # internet-facing NLB here means anyone with the URL sees every
+    # metric, target, and label. There's no ALB-style inbound-cidrs
+    # annotation for NLB — if you need to restrict source IPs, do it via
+    # a security group on the NLB's target/backing resources instead.
+    prometheus:
+      prometheusSpec:
+        nodeSelector:
+          role: monitoring
+        tolerations:
+          - key: dedicated
+            operator: Equal
+            value: monitoring
+            effect: NoSchedule
+        retention: 15d
+      service:
+        type: LoadBalancer
+        annotations:
+          service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+
+    # DaemonSet — deliberately NOT nodeSelector-pinned, it must run on
+    # every node (including the monitoring one) to scrape host metrics.
+    prometheus-node-exporter:
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: monitoring
+          effect: NoSchedule
+  EOT
+  ]
+
+  depends_on = [module.eks, kubernetes_namespace.monitoring, helm_release.alb_controller]
+}
+
+data "kubernetes_service" "grafana" {
+  metadata {
+    name      = "kube-prometheus-stack-grafana"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+  }
+  depends_on = [helm_release.kube_prometheus_stack]
+}
+
+data "kubernetes_service" "prometheus" {
+  metadata {
+    name      = "kube-prometheus-stack-prometheus"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+  }
+  depends_on = [helm_release.kube_prometheus_stack]
 }
