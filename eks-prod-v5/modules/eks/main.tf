@@ -234,7 +234,7 @@ resource "aws_eks_node_group" "monitoring" {
   subnet_ids      = var.private_subnet_ids
 
   instance_types = var.monitoring_node_instance_types
-  capacity_type  = "ON_DEMAND"
+  capacity_type  = "SPOT"
   ami_type       = "AL2023_x86_64_STANDARD"
   disk_size      = 50
 
