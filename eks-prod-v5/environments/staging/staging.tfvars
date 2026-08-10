@@ -27,7 +27,7 @@ cluster_version = "1.36"
 # t3.small nodes instead of c7i-flex.large — ~75% cheaper per instance,
 # and 3-4 small nodes still gets you the multi-node scheduling behavior
 # you actually need to test, without the compute-optimized price tag.
-node_instance_types = ["c7i-flex-large"]
+node_instance_types = ["c7i-flex.large"]
 
 node_desired_size = 3
 node_min_size     = 2
